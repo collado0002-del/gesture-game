@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBER-CONNECT:Gesture Assessment Engine</title>
+
+  <!-- External CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.85);
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding: 15px;
+    }
+
+    /* Top Navigation HUD */
+    .nav-hud {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      margin-bottom: 15px;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .hud-badges { display: flex; gap: 12px; align-items: center; }
+
+    .badge {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-green { border-color: var(--accent-green); color: var(--accent-green); }
+    .badge-cyan { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+    .badge-yellow { border-color: #facc15; color: #facc15; }
+    .badge-red { border-color: var(--accent-red); color: var(--accent-red); }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .btn-primary { background: var(--accent-blue); color: white; }
+    .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+    .btn-success { background: var(--accent-green); color: white; }
+    .btn-dark { background: #334155; color: white; }
+    .btn-dark:hover { background: #475569; }
+
+    /* Main Screen Container */
+    #main-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Question Display Header */
+    #question-card {
+      width: 100%;
+      background: var(--panel-bg);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px 14px 0 0;
+      padding: 20px 25px;
+      text-align: center;
+      position: relative;
+    }
+
+    #question-category {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--accent-cyan);
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    #question-text {
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.3;
+      margin-bottom: 10px;
+    }
+
+    #word-blanks {
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 12px;
+      color: #facc15;
+      margin-top: 5px;
+      text-shadow: 0 0 10px rgba(250, 204, 21, 0.3);
+    }
+
+    /* Timer Badge Header Overlay */
+    .timer-overlay {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+    }
+
+    /* Primary Viewport Canvas */
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 620px;
+      background: #000;
+      border-radius: 0 0 14px 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-top: none;
+    }
+
+    video { display: none; }
+    canvas { width: 100%; height: 100%; display: block; }
+
+    /* Modals & Popups */
+    .modal-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 30px;
+      border-radius: 14px;
+    }
+
+    .modal-box {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      padding: 30px;
+      width: 100%;
+      max-width: 650px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 12px;
+    }
+
+    .modal-title { font-size: 20px; font-weight: 700; color: var(--accent-cyan); }
+
+    .form-group { margin-bottom: 18px; text-align: left; }
+    .form-group label { display: block; font-size: 13px; color: var(--text-sub); margin-bottom: 6px; }
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: #0f172a;
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      font-size: 15px;
+    }
+
+    .tab-nav { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .tab-btn {
+      padding: 8px 14px;
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-size: 13px;
+    }
+    .tab-btn.active { color: var(--accent-cyan); border-color: var(--accent-cyan); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .q-list { max-height: 220px; overflow-y: auto; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+    .q-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    /* Score Table */
+    .score-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    .score-table th, .score-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .score-table th { color: var(--accent-cyan); }
+
+    .hidden { display: none !important; }
+
+    #status-toast {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--accent-cyan);
+      padding: 10px 24px;
+      border-radius: 30px;
+      font-size: 15px;
+      font-weight: 600;
+      z-index: 10;
+      pointer-events: none;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation HUD -->
+  <div class="nav-hud">
+    <div class="brand-title">
+      <i class="fa-solid fa-hand-pointer"></i> CYBER LETTER-CONNECT by: TOMTECH
+    </div>
+    <div class="hud-badges">
+      <div class="badge badge-yellow"><i class="fa-solid fa-user-graduate"></i> <span id="hud-student-display">Guest Student</span></div>
+      <div class="badge badge-cyan"><i class="fa-solid fa-key"></i> Key: <span id="hud-key-id">LOCKED</span></div>
+      <div class="badge badge-green"><i class="fa-solid fa-coins"></i> Credits: <span id="hud-credits">0</span></div>
+      <button class="btn btn-dark" onclick="toggleStudentModal()"><i class="fa-solid fa-user-pen"></i> Student</button>
+      <button class="btn btn-dark" onclick="toggleTeacherPortal()"><i class="fa-solid fa-chalkboard-user"></i> Teacher Hub</button>
+    </div>
+  </div>
+
+  <!-- Main Game Wrapper -->
+  <div id="main-wrapper">
+    
+    <!-- Question HUD Display with Countdown Timer -->
+    <div id="question-card">
+      <div class="timer-overlay">
+        <div class="badge badge-red" id="timer-badge">
+          <i class="fa-solid fa-stopwatch"></i> Time: <span id="timer-sec">30</span>s
+        </div>
+      </div>
+      <div id="question-category">HARDWARE ASSESSMENT</div>
+      <div id="question-text">Loading Assessment Item...</div>
+      <div id="word-blanks">_ _ _ _</div>
+    </div>
+
+    <!-- WebGL Canvas Viewport -->
+    <div id="canvas-container">
+      <video id="webcam" playsinline></video>
+      <canvas id="gameCanvas" width="1000" height="620"></canvas>
+      <div id="status-toast"><i class="fa-solid fa-camera"></i> Initializing Camera & Tracking...</div>
+    </div>
+
+    <!-- 1. LICENSE LOCK OVERLAY MODAL -->
+    <div id="modal-license" class="modal-overlay">
+      <div class="modal-box" style="text-align: center;">
+        <i class="fa-solid fa-lock" style="font-size: 48px; color: var(--accent-cyan); margin-bottom: 15px;"></i>
+        <h2 style="margin-bottom: 8px;">Software License Activation</h2>
+        <p style="color: var(--text-sub); font-size: 14px; margin-bottom: 20px;">
+          Enter your teacher access key to unlock the ICT Assessment Engine.
+        </p>
+        <div class="form-group">
+          <input type="text" id="license-input" class="form-control" placeholder="e.g. Contact Site Owner for Key -tomcollado15@gmail.com" style="text-align: center; font-weight: bold; letter-spacing: 2px;">
+        </div>
+        <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" onclick="activateLicenseKey()">
+          <i class="fa-solid fa-key"></i> Activate & Unlock Engine
+        </button>
+        <p id="license-error" style="color: var(--accent-red); font-size: 13px; margin-top: 12px; min-height: 18px;"></p>
+        <div style="margin-top: 15px; font-size: 12px; color: var(--text-sub);">
+          Default Demo Key: <b style="color:white;">DEMO-2026-KEY</b>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. STUDENT REGISTRATION MODAL -->
+    <div id="modal-student" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fa-solid fa-user-graduate"></i> Student Assessment Registration</div>
+        </div>
+        <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 15px;">
+          Enter student details so completed assessment scores can be recorded for the teacher.
+        </p>
+        <div class="form-group">
+          <label>Full Student Name:</label>
+          <input type="text" id="student-name-input" class="form-control" placeholder="e.g. Juan Cruz">
+        </div>
+        <div class="form-group">
+          <label>Grade & Section:</label>
+          <input type="text" id="student-section-input" class="form-control" placeholder="e.g. Grade 10 - ICT A">
+        </div>
+        <button class="btn btn-success" style="width: 100%; justify-content: center; padding: 12px;" onclick="saveStudentProfile()">
+          <i class="fa-solid fa-play"></i> Start Assessment Session
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. TEACHER HUB MODAL -->
+    <div id="modal-teacher" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="modal-title"><i class="fa-solid fa-chalkboard-user"></i> Teacher Management Portal</div>
+          <button class="btn btn-dark" onclick="toggleTeacherPortal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="tab-nav">
+          <button class="tab-btn active" onclick="switchTab('tab-import')">Import CSV/Excel</button>
+          <button class="tab-btn" onclick="switchTab('tab-generator')">Topic Generator</button>
+          <button class="tab-btn" onclick="switchTab('tab-bank')">Active Bank (<span id="q-count">0</span>)</button>
+          <button class="tab-btn" onclick="switchTab('tab-scores')">Student Gradebook</button>
+        </div>
+
+        <!-- TAB 1: CSV IMPORT -->
+        <div id="tab-import" class="tab-content active">
+          <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 10px;">
+            Upload custom ICT questions via CSV (Columns: <code>Question, Answer, Category</code>).
+          </p>
+          <p style="font-size: 12px; color: var(--accent-cyan); font-weight: bold; margin-bottom: 15px;">
+            <i class="fa-solid fa-circle-info"></i> Cost: 1 credit per 10 questions imported.
+          </p>
+          <div class="form-group">
+            <label>Select CSV File:</label>
+            <input type="file" id="csv-file-input" class="form-control" accept=".csv">
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-success" onclick="processCSVImport()"><i class="fa-solid fa-file-import"></i> Load & Import Set</button>
+            <button class="btn btn-dark" onclick="downloadCSVTemplate()"><i class="fa-solid fa-file-csv"></i> Download Template</button>
+          </div>
+        </div>
+
+        <!-- TAB 2: QUESTION GENERATOR -->
+        <div id="tab-generator" class="tab-content">
+          <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 10px;">
+            Select a module to automatically load a preset ICT quiz set:
+          </p>
+          <p style="font-size: 12px; color: var(--accent-cyan); font-weight: bold; margin-bottom: 15px;">
+            <i class="fa-solid fa-circle-info"></i> Cost: 1 credit per 10 items generated.
+          </p>
+          <div class="form-group">
+            <label>Select Module Preset:</label>
+            <select id="preset-topic-select" class="form-control">
+              <option value="hardware">Computer Hardware & Architecture (3 items)</option>
+              <option value="networking">Networking & Internet Protocols (3 items)</option>
+              <option value="cyber">Cybersecurity & Ethics (3 items)</option>
+              <option value="webdev">Web Development & HTML/CSS (3 items)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="generatePresetQuestions()"><i class="fa-solid fa-wand-magic-sparkles"></i> Load Preset Questions</button>
+        </div>
+
+        <!-- TAB 3: ACTIVE BANK -->
+        <div id="tab-bank" class="tab-content">
+          <div id="active-q-list" class="q-list"></div>
+          <button class="btn btn-dark" onclick="resetDefaultQuestions()"><i class="fa-solid fa-rotate-left"></i> Restore Default Bank</button>
+        </div>
+
+        <!-- TAB 4: STUDENT GRADEBOOK & SCORE REPORTS -->
+        <div id="tab-scores" class="tab-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <p style="font-size: 13px; color: var(--text-sub);">Recorded student session achievements:</p>
+            <button class="btn btn-success" onclick="exportStudentScoresCSV()"><i class="fa-solid fa-file-csv"></i> Export Gradebook CSV</button>
+          </div>
+          <div class="q-list" style="max-height: 200px;">
+            <table class="score-table">
+              <thead>
+                <tr>
+                  <th>Student Name</th>
+                  <th>Section</th>
+                  <th>Score</th>
+                  <th>Topic</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="scores-table-body">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+          <button class="btn btn-dark" onclick="clearGradebook()"><i class="fa-solid fa-trash"></i> Clear Records</button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ------------------------------------------------------------------
+    // 1. WEB AUDIO SYNTHESIZER ENGINE
+    // ------------------------------------------------------------------
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playPopSound() {
+      initAudio();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    }
+
+    function playCorrectSound() {
+      initAudio();
+      if (!audioCtx) return;
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.09);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime + idx * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + idx * 0.09 + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(audioCtx.currentTime + idx * 0.09);
+        osc.stop(audioCtx.currentTime + idx * 0.09 + 0.3);
+      });
+    }
+
+    function playErrorSound() {
+      initAudio();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+      osc.frequency.linearRampToValueAtTime(110, audioCtx.currentTime + 0.25);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.25);
+    }
+
+    function playClickSound() {
+      initAudio();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.04);
+    }
+
+    // ------------------------------------------------------------------
+    // 2. DATASETS & MASTER KEYS FOR NETLIFY
+    // ------------------------------------------------------------------
+    const MASTER_KEYS = {
+      "DEMO-2026-KEY": { credits: 10, client: "Public Demo" },
+      "ICT-200-KEY01": { credits: 200, client: "Subscriber 01" },
+      "ICT-200-KEY02": { credits: 200, client: "Subscriber 02" },
+      "ICT-200-KEY03": { credits: 200, client: "Subscriber 03" },
+      "ICT-200-KEY04": { credits: 200, client: "Subscriber 04" },
+      "ICT-200-KEY05": { credits: 200, client: "Subscriber 05" },
+      "ICT-200-KEY06": { credits: 200, client: "Subscriber 06" },
+      "ICT-200-KEY07": { credits: 200, client: "Subscriber 07" },
+      "ICT-200-KEY08": { credits: 200, client: "Subscriber 08" },
+      "ICT-200-KEY09": { credits: 200, client: "Subscriber 09" },
+      "ICT-200-KEY10": { credits: 200, client: "Subscriber 10" }
+    };
+
+    const defaultQuestions = [
+      { q: "Primary processing unit of a computer system", answer: "CPU", category: "HARDWARE" },
+      { q: "Volatile high-speed working memory", answer: "RAM", category: "HARDWARE" },
+      { q: "Global interconnected network of computers", answer: "INTERNET", category: "NETWORKING" },
+      { q: "Non-volatile memory holding boot instructions", answer: "ROM", category: "HARDWARE" },
+      { q: "Unique numerical address assigned to devices", answer: "IPADDRESS", category: "NETWORKING" }
+    ];
+
+    const presetTopics = {
+      hardware: [
+        { q: "Main circuit board housing CPU and memory", answer: "MOTHERBOARD", category: "HARDWARE" },
+        { q: "Permanent magnetic data storage drive", answer: "HARDDRIVE", category: "HARDWARE" },
+        { q: "Converts AC power to low-voltage DC power", answer: "PSU", category: "HARDWARE" }
+      ],
+      networking: [
+        { q: "Interconnects networks and directs data traffic", answer: "ROUTER", category: "NETWORKING" },
+        { q: "Network barrier filtering incoming traffic", answer: "FIREWALL", category: "NETWORKING" },
+        { q: "Translates domain names into IP addresses", answer: "DNS", category: "NETWORKING" }
+      ],
+      cyber: [
+        { q: "Malicious software designed to cause damage", answer: "MALWARE", category: "CYBERSECURITY" },
+        { q: "Attempt to steal sensitive credentials", answer: "PHISHING", category: "CYBERSECURITY" },
+        { q: "Encoding data to prevent unauthorized access", answer: "ENCRYPTION", category: "CYBERSECURITY" }
+      ],
+      webdev: [
+        { q: "Standard markup language for web structure", answer: "HTML", category: "WEB DEVELOPMENT" },
+        { q: "Style sheet language used for web design", answer: "CSS", category: "WEB DEVELOPMENT" },
+        { q: "Scripting language for web interactivity", answer: "JAVASCRIPT", category: "WEB DEVELOPMENT" }
+      ]
+    };
+
+    let activeQuestions = [...defaultQuestions];
+    let currentQIdx = 0;
+    let targetWord = "";
+    let letterNodes = [];
+    let selectedNodes = [];
+    let isProcessing = false;
+    let activeKey = null;
+
+    // Student Progress Tracking
+    let currentStudent = { name: "Guest Student", section: "General" };
+    let studentScore = 0;
+
+    // Countdown Timer State Variables
+    const QUESTION_TIME_LIMIT = 30; // 30 seconds per question
+    let timerInterval = null;
+    let timeLeft = QUESTION_TIME_LIMIT;
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const video = document.getElementById('webcam');
+    const statusToast = document.getElementById('status-toast');
+
+    function getKeysFromStorage() {
+      const stored = localStorage.getItem('ict_app_keys');
+      if (stored) return JSON.parse(stored);
+      return MASTER_KEYS;
+    }
+
+    function saveKeysToStorage(keys) {
+      localStorage.setItem('ict_app_keys', JSON.stringify(keys));
+    }
+
+    // ------------------------------------------------------------------
+    // 3. TIMER ENGINE
+    // ------------------------------------------------------------------
+    function startQuestionTimer() {
+      clearInterval(timerInterval);
+      timeLeft = QUESTION_TIME_LIMIT;
+      document.getElementById('timer-sec').innerText = timeLeft;
+
+      timerInterval = setInterval(() => {
+        if (isProcessing) return; // Pause during transitions or popups
+        timeLeft--;
+        document.getElementById('timer-sec').innerText = timeLeft;
+
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          handleTimeOut();
+        }
+      }, 1000);
+    }
+
+    function stopQuestionTimer() {
+      clearInterval(timerInterval);
+    }
+
+    function handleTimeOut() {
+      isProcessing = true;
+      playErrorSound();
+      statusToast.innerHTML = '<i class="fa-solid fa-clock" style="color:var(--accent-red);"></i> Time\'s Up! Skipping item...';
+
+      setTimeout(() => {
+        if (currentQIdx + 1 >= activeQuestions.length) {
+          recordStudentScore(activeQuestions[0].category, studentScore, activeQuestions.length);
+          alert(`Assessment Completed!\nStudent: ${currentStudent.name}\nFinal Score: ${studentScore} / ${activeQuestions.length}`);
+          studentScore = 0;
+          setupQuestion(0);
+          statusToast.innerHTML = '<i class="fa-solid fa-hand"></i> Point Index Finger to Spell';
+        } else {
+          setupQuestion(currentQIdx + 1);
+          statusToast.innerHTML = '<i class="fa-solid fa-hand"></i> Point Index Finger to Spell';
+        }
+      }, 1500);
+    }
+
+    // ------------------------------------------------------------------
+    // 4. STUDENT REGISTRATION & SCORE RECORDING
+    // ------------------------------------------------------------------
+    function toggleStudentModal() {
+      playClickSound();
+      stopQuestionTimer();
+      document.getElementById('modal-student').classList.toggle('hidden');
+    }
+
+    function saveStudentProfile() {
+      playClickSound();
+      const name = document.getElementById('student-name-input').value.trim();
+      const section = document.getElementById('student-section-input').value.trim();
+
+      if (!name) return alert("Please enter the student's name.");
+
+      currentStudent = { name: name, section: section || "N/A" };
+      studentScore = 0;
+      document.getElementById('hud-student-display').innerText = `${currentStudent.name} (${currentStudent.section})`;
+      document.getElementById('modal-student').classList.add('hidden');
+      setupQuestion(0);
+    }
+
+    function recordStudentScore(topic, score, total) {
+      const storedScores = JSON.parse(localStorage.getItem('ict_student_scores') || "[]");
+      const record = {
+        name: currentStudent.name,
+        section: currentStudent.section,
+        score: `${score}/${total}`,
+        percentage: `${Math.round((score/total) * 100)}%`,
+        topic: topic,
+        date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+      };
+      storedScores.push(record);
+      localStorage.setItem('ict_student_scores', JSON.stringify(storedScores));
+      renderScoreTable();
+    }
+
+    function renderScoreTable() {
+      const storedScores = JSON.parse(localStorage.getItem('ict_student_scores') || "[]");
+      const tbody = document.getElementById('scores-table-body');
+      tbody.innerHTML = "";
+
+      storedScores.reverse().forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><b>${item.name}</b></td>
+          <td>${item.section}</td>
+          <td><b style="color:var(--accent-green);">${item.score} (${item.percentage})</b></td>
+          <td>${item.topic}</td>
+          <td style="font-size:11px; color:var(--text-sub);">${item.date}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function exportStudentScoresCSV() {
+      playClickSound();
+      const storedScores = JSON.parse(localStorage.getItem('ict_student_scores') || "[]");
+      if (storedScores.length === 0) return alert("No recorded student scores available.");
+
+      const csvContent = "data:text/csv;charset=utf-8," + Papa.unparse(storedScores);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodeURI(csvContent));
+      link.setAttribute("download", `student_gradebook_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function clearGradebook() {
+      playClickSound();
+      if (confirm("Clear all student gradebook records?")) {
+        localStorage.removeItem('ict_student_scores');
+        renderScoreTable();
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // 5. LICENSE LOCK & DEDUCTION SYSTEM
+    // ------------------------------------------------------------------
+    function activateLicenseKey() {
+      playClickSound();
+      const inputKey = document.getElementById('license-input').value.trim().toUpperCase();
+      const errorEl = document.getElementById('license-error');
+      let storedKeys = getKeysFromStorage();
+
+      if (!storedKeys[inputKey] && MASTER_KEYS[inputKey]) {
+        storedKeys[inputKey] = { ...MASTER_KEYS[inputKey] };
+        saveKeysToStorage(storedKeys);
+      }
+
+      if (storedKeys[inputKey]) {
+        if (storedKeys[inputKey].credits > 0) {
+          activeKey = inputKey;
+          document.getElementById('hud-key-id').innerText = activeKey;
+          document.getElementById('hud-credits').innerText = storedKeys[activeKey].credits;
+          document.getElementById('modal-license').classList.add('hidden');
+          
+          if (currentStudent.name === "Guest Student") {
+            toggleStudentModal();
+          } else {
+            setupQuestion(0);
+          }
+        } else {
+          errorEl.innerText = "Key has 0 credits remaining.";
+        }
+      } else {
+        errorEl.innerText = "Invalid License Key.";
+      }
+    }
+
+    function processTeacherActionDeduction(itemCount) {
+      if (!activeKey) {
+        alert("Please activate a valid License Key first.");
+        return false;
+      }
+
+      const keys = getKeysFromStorage();
+      if (!keys[activeKey]) {
+        alert("Active license key not found.");
+        return false;
+      }
+
+      const cost = Math.max(1, Math.ceil(itemCount / 10));
+
+      if (keys[activeKey].credits < cost) {
+        alert(`Insufficient Credits!\n\nImporting/Creating ${itemCount} items requires ${cost} credit(s).\nYou only have ${keys[activeKey].credits} credit(s) remaining.`);
+        return false;
+      }
+
+      keys[activeKey].credits -= cost;
+      saveKeysToStorage(keys);
+      document.getElementById('hud-credits').innerText = keys[activeKey].credits;
+      
+      alert(`Action Approved!\nLoaded ${itemCount} question(s).\n${cost} credit(s) deducted. Remaining: ${keys[activeKey].credits}`);
+      return true;
+    }
+
+    // ------------------------------------------------------------------
+    // 6. CIRCULAR WHEEL LAYOUT ENGINE
+    // ------------------------------------------------------------------
+    function setupQuestion(index) {
+      if (activeQuestions.length === 0) return;
+      currentQIdx = index % activeQuestions.length;
+      const currentItem = activeQuestions[currentQIdx];
+
+      targetWord = currentItem.answer;
+      document.getElementById('question-category').innerText = currentItem.category;
+      document.getElementById('question-text').innerText = `Q${currentQIdx + 1}/${activeQuestions.length}: ${currentItem.q}`;
+      document.getElementById('word-blanks').innerText = "_ ".repeat(targetWord.length).trim();
+
+      selectedNodes = [];
+      isProcessing = false;
+
+      const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let charSet = targetWord.split('');
+      while (charSet.length < Math.max(targetWord.length + 3, 7)) {
+        let rand = alphabet[Math.floor(Math.random() * alphabet.length)];
+        if (!charSet.includes(rand)) charSet.push(rand);
+      }
+      charSet.sort(() => Math.random() - 0.5);
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2 + 20;
+      const radius = 185;
+      const total = charSet.length;
+
+      letterNodes = charSet.map((char, i) => {
+        const angle = (i * 2 * Math.PI / total) - (Math.PI / 2);
+        return {
+          char: char,
+          x: centerX + radius * Math.cos(angle),
+          y: centerY + radius * Math.sin(angle),
+          radius: 42
+        };
+      });
+
+      startQuestionTimer(); // Restart Timer for New Item
+    }
+
+    // ------------------------------------------------------------------
+    // 7. MEDIAPIPE GESTURE ENGINE
+    // ------------------------------------------------------------------
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(renderFrame);
+
+    const camera = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: 1000,
+      height: 620
+    });
+    camera.start().then(() => {
+      statusToast.innerHTML = '<i class="fa-solid fa-hand"></i> Gesture Tracking Active: Point Index Finger';
+    }).catch(() => {
+      statusToast.innerHTML = '<i class="fa-solid fa-mouse"></i> Mouse Fallback Active';
+    });
+
+    function renderFrame(results) {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results.image) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2 + 20;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 185, 0, 2 * Math.PI);
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.25)';
+      ctx.setLineDash([8, 8]);
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (selectedNodes.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 8;
+        ctx.lineJoin = 'round';
+        for (let i = 0; i < selectedNodes.length - 1; i++) {
+          ctx.moveTo(selectedNodes[i].x, selectedNodes[i].y);
+          ctx.lineTo(selectedNodes[i + 1].x, selectedNodes[i + 1].y);
+        }
+        ctx.stroke();
+      }
+
+      letterNodes.forEach((node) => {
+        const isSelected = selectedNodes.includes(node);
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
+        ctx.fillStyle = isSelected ? '#06b6d4' : 'rgba(30, 41, 59, 0.95)';
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = isSelected ? '#38bdf8' : 'rgba(255, 255, 255, 0.35)';
+        ctx.stroke();
+
+        ctx.fillStyle = isSelected ? '#0f172a' : '#ffffff';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(node.char, node.x, node.y);
+      });
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && !isProcessing) {
+        const indexTip = results.multiHandLandmarks[0][8];
+        const fingerX = (1 - indexTip.x) * canvas.width;
+        const fingerY = indexTip.y * canvas.height;
+
+        ctx.beginPath();
+        ctx.arc(fingerX, fingerY, 15, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        checkNodeCollision(fingerX, fingerY);
+      }
+    }
+
+    function checkNodeCollision(x, y) {
+      if (isProcessing) return;
+      letterNodes.forEach((node) => {
+        const dist = Math.hypot(x - node.x, y - node.y);
+        if (dist < node.radius) {
+          if (!selectedNodes.includes(node)) {
+            selectedNodes.push(node);
+            playPopSound();
+            updateWordDisplay();
+          }
+        }
+      });
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.top);
+      checkNodeCollision(x, y);
+    });
+
+    function updateWordDisplay() {
+      const currentString = selectedNodes.map(n => n.char).join('');
+      let blanksArr = targetWord.split('').map((char, i) => i < currentString.length ? currentString[i] : '_');
+      document.getElementById('word-blanks').innerText = blanksArr.join(' ');
+
+      if (currentString === targetWord) {
+        isProcessing = true;
+        stopQuestionTimer();
+        studentScore++;
+        playCorrectSound();
+        statusToast.innerHTML = '<i class="fa-solid fa-circle-check" style="color:var(--accent-green);"></i> Correct Answer!';
+
+        if (currentQIdx + 1 >= activeQuestions.length) {
+          recordStudentScore(activeQuestions[0].category, studentScore, activeQuestions.length);
+          setTimeout(() => {
+            alert(`Assessment Completed!\nStudent: ${currentStudent.name}\nFinal Score: ${studentScore} / ${activeQuestions.length}`);
+            studentScore = 0;
+            setupQuestion(0);
+            statusToast.innerHTML = '<i class="fa-solid fa-hand"></i> Point Index Finger to Spell';
+          }, 1000);
+        } else {
+          setTimeout(() => {
+            setupQuestion(currentQIdx + 1);
+            statusToast.innerHTML = '<i class="fa-solid fa-hand"></i> Point Index Finger to Spell';
+          }, 1400);
+        }
+
+      } else if (!targetWord.startsWith(currentString)) {
+        isProcessing = true;
+        playErrorSound();
+        statusToast.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-red);"></i> Incorrect Path! Resetting...';
+        setTimeout(() => {
+          selectedNodes = [];
+          updateWordDisplay();
+          isProcessing = false;
+          statusToast.innerHTML = '<i class="fa-solid fa-hand"></i> Point Index Finger to Spell';
+        }, 900);
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // 8. TEACHER PORTAL & CSV FUNCTIONS
+    // ------------------------------------------------------------------
+    function toggleTeacherPortal() {
+      playClickSound();
+      stopQuestionTimer();
+      document.getElementById('modal-teacher').classList.toggle('hidden');
+      renderQuestionList();
+      renderScoreTable();
+    }
+
+    function switchTab(tabId) {
+      playClickSound();
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    function processCSVImport() {
+      playClickSound();
+      const fileInput = document.getElementById('csv-file-input');
+      if (!fileInput.files.length) return alert("Select a CSV file.");
+
+      Papa.parse(fileInput.files[0], {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const parsed = [];
+          results.data.forEach(row => {
+            if (row.Question && row.Answer) {
+              parsed.push({
+                q: row.Question.trim(),
+                answer: row.Answer.trim().toUpperCase(),
+                category: row.Category ? row.Category.trim().toUpperCase() : "CUSTOM"
+              });
+            }
+          });
+
+          if (parsed.length > 0) {
+            if (processTeacherActionDeduction(parsed.length)) {
+              activeQuestions = parsed;
+              studentScore = 0;
+              setupQuestion(0);
+              renderQuestionList();
+              toggleTeacherPortal();
+            }
+          } else {
+            alert("CSV format invalid. Required columns: Question, Answer, Category");
+          }
+        }
+      });
+    }
+
+    function downloadCSVTemplate() {
+      playClickSound();
+      const csvContent = "data:text/csv;charset=utf-8,Question,Answer,Category\nCentral Processing Unit,CPU,HARDWARE\nVolatile memory,RAM,HARDWARE";
+      const link = document.createElement("a");
+      link.setAttribute("href", encodeURI(csvContent));
+      link.setAttribute("download", "ict_questions.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function generatePresetQuestions() {
+      playClickSound();
+      const selected = document.getElementById('preset-topic-select').value;
+      if (presetTopics[selected]) {
+        const selectedSet = presetTopics[selected];
+        if (processTeacherActionDeduction(selectedSet.length)) {
+          activeQuestions = [...selectedSet];
+          studentScore = 0;
+          setupQuestion(0);
+          renderQuestionList();
+          toggleTeacherPortal();
+        }
+      }
+    }
+
+    function renderQuestionList() {
+      const listEl = document.getElementById('active-q-list');
+      document.getElementById('q-count').innerText = activeQuestions.length;
+      listEl.innerHTML = "";
+      activeQuestions.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'q-item';
+        div.innerHTML = `<span><b>Q${idx + 1}:</b> ${item.q} (<b style="color:var(--accent-cyan);">${item.answer}</b>)</span>`;
+        listEl.appendChild(div);
+      });
+    }
+
+    function resetDefaultQuestions() {
+      playClickSound();
+      activeQuestions = [...defaultQuestions];
+      studentScore = 0;
+      setupQuestion(0);
+      renderQuestionList();
+    }
+  </script>
+</body>
+</html>
